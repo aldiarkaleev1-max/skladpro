@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
 import { ConfirmProvider } from './context/ConfirmContext';
@@ -16,7 +16,7 @@ function App() {
     <ThemeProvider>
       <ToastProvider>
         <ConfirmProvider>
-          <BrowserRouter>
+          <HashRouter>
             <Routes>
               <Route path="/" element={<Layout />}>
                 <Route index element={<Dashboard />} />
@@ -27,7 +27,7 @@ function App() {
                 <Route path="settings" element={<Settings />} />
               </Route>
             </Routes>
-          </BrowserRouter>
+          </HashRouter>
         </ConfirmProvider>
       </ToastProvider>
     </ThemeProvider>
