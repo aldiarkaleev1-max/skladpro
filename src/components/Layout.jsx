@@ -3,8 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { useIsMobile } from '../hooks/useIsMobile';
-import { useTheme } from '../context/ThemeContext';
-import { LayoutDashboard, Package, ArrowRightLeft, BarChart3, Settings, Sun, Moon, Users } from 'lucide-react';
+import { LayoutDashboard, Package, ArrowRightLeft, BarChart3, Settings, Users } from 'lucide-react';
 
 const pageTitles = {
   '/': 'Главная панель',
@@ -36,16 +35,12 @@ const tabs = [
 export function Layout() {
   const { pathname } = useLocation();
   const isMobile = useIsMobile();
-  const { isDark, toggleTheme } = useTheme();
 
   if (isMobile) {
     return (
       <div className="mobile-app">
         <header className="mobile-header">
           <h1>{mobileTitles[pathname] || 'СкладПро'}</h1>
-          <button className="btn-icon" onClick={toggleTheme}>
-            {isDark ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
         </header>
         <main className="mobile-content">
           <Outlet />

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useIsMobile } from '../hooks/useIsMobile';
-import { initialInventory, categories, locations } from '../data/mockData';
+import { initialInventory, initialTransactions, categories, locations, initialSuppliers } from '../data/mockData';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { Plus, Edit2, Trash2, Search, X, Download, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react';
@@ -13,6 +13,8 @@ const statusBadge = { 'in-stock': 'badge-success', 'low-stock': 'badge-warning',
 
 export function Inventory() {
   const [inventory, setInventory] = useLocalStorage('inventory-data', initialInventory);
+  const [transactions, setTransactions] = useLocalStorage('inventory-transactions', initialTransactions);
+  const [suppliers] = useLocalStorage('inventory-suppliers', initialSuppliers);
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('Все');
   const [modal, setModal] = useState(false);
@@ -20,9 +22,21 @@ export function Inventory() {
   const { addToast } = useToast();
   const confirm = useConfirm();
   const isMobile = useIsMobile();
-  const emptyForm = { sku: '', name: '', category: categories[0], quantity: 0, price: 0, supplier: '', location: locations[0] };
+  const emptyForm = { sku: '', name: '', category: '', quantity: '', price: '', supplier: '', location: '' };
   const [form, setForm] = useState(emptyForm);
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const [catOpen, setCatOpen] = useState(false);
+  const [locOpen, setLocOpen] = useState(false);
+  const [supOpen, setSupOpen] = useState(false);
+  const [pageSize, setPageSize] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const allCategories = Array.from(new Set([...categories, ...inventory.map(i => i.category).filter(Boolean)]));
+  const allLocations = Array.from(new Set([...locations, ...inventory.map(i => i.location).filter(Boolean)]));
+
+  const filteredCategories = allCategories.filter(c => c.toLowerCase().includes((form.category || '').toLowerCase()));
+  const filteredLocations = allLocations.filter(c => c.toLowerCase().includes((form.location || '').toLowerCase()));
+  const allSupplierNames = suppliers.map(s => s.name);
+  const filteredSuppliers = allSupplierNames.filter(c => c.toLowerCase().includes((form.supplier || '').toLowerCase()));
 
   let filtered = inventory.filter(i => {
     const matchSearch = i.name.toLowerCase().includes(search.toLowerCase()) || i.sku.toLowerCase().includes(search.toLowerCase());
@@ -30,30 +44,19 @@ export function Inventory() {
     return matchSearch && matchCat;
   });
 
-  if (sortConfig.key) {
-    filtered.sort((a, b) => {
-      let aVal = a[sortConfig.key];
-      let bVal = b[sortConfig.key];
-      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-      return 0;
-    });
-  }
+  const totalPages = Math.ceil(filtered.length / pageSize) || 1;
+  if (currentPage > totalPages) setCurrentPage(totalPages);
+  
+  const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  const handleSort = (key) => {
-    let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
-    setSortConfig({ key, direction });
-  };
 
-  const getSortIcon = (key) => {
-    if (sortConfig.key !== key) return <ArrowUpDown size={14} style={{ opacity: 0.3, marginLeft: 4 }} />;
-    return sortConfig.direction === 'asc' ? <ChevronUp size={14} style={{ marginLeft: 4 }} /> : <ChevronDown size={14} style={{ marginLeft: 4 }} />;
-  };
 
   const openModal = (item = null) => {
     if (item) { setEditing(item); setForm({ ...item }); }
     else { setEditing(null); setForm(emptyForm); }
+    setCatOpen(false);
+    setLocOpen(false);
+    setSupOpen(false);
     setModal(true);
   };
 
@@ -61,10 +64,46 @@ export function Inventory() {
     e.preventDefault();
     const q = Number(form.quantity); const p = Number(form.price);
     if (editing) {
+      const oldQ = Number(editing.quantity || 0);
       setInventory(inventory.map(i => i.id === editing.id ? { ...form, id: i.id, quantity: q, price: p, status: getStatus(q) } : i));
+      
+      if (q !== oldQ) {
+        const txIndex = transactions.findIndex(tx => tx.itemId === editing.id && tx.type === 'in');
+        if (txIndex !== -1) {
+          const newTransactions = [...transactions];
+          newTransactions[txIndex] = { 
+            ...newTransactions[txIndex], 
+            quantity: Math.max(0, newTransactions[txIndex].quantity + (q - oldQ))
+          };
+          setTransactions(newTransactions);
+        } else if (q > oldQ) {
+          const newTx = {
+            id: uuidv4(),
+            date: new Date().toISOString(),
+            type: 'in',
+            itemId: editing.id,
+            quantity: q - oldQ,
+            note: 'Корректировка остатков'
+          };
+          setTransactions([newTx, ...transactions]);
+        }
+      }
       addToast('Товар обновлён', 'success');
     } else {
-      setInventory([...inventory, { ...form, id: uuidv4(), quantity: q, price: p, status: getStatus(q) }]);
+      const newId = uuidv4();
+      setInventory([...inventory, { ...form, id: newId, quantity: q, price: p, status: getStatus(q) }]);
+      
+      if (q > 0) {
+        const newTx = {
+          id: uuidv4(),
+          date: new Date().toISOString(),
+          type: 'in',
+          itemId: newId,
+          quantity: q,
+          note: 'Начальный остаток'
+        };
+        setTransactions([newTx, ...transactions]);
+      }
       addToast('Товар добавлен', 'success');
     }
     setModal(false); setEditing(null);
@@ -103,11 +142,34 @@ export function Inventory() {
               <label className={isMobile ? "m-label" : "input-label"}>Артикул</label>
               <input className={isMobile ? "m-input" : "input-field"} required value={form.sku} onChange={e => set('sku', e.target.value)} />
             </div>
-            <div className={isMobile ? "m-input-group" : "input-group"}>
+            <div className={isMobile ? "m-input-group" : "input-group"} style={{ position: 'relative' }}>
               <label className={isMobile ? "m-label" : "input-label"}>Категория</label>
-              <select className={isMobile ? "m-input" : "input-field"} value={form.category} onChange={e => set('category', e.target.value)}>
-                {categories.map(c => <option key={c}>{c}</option>)}
-              </select>
+              <div className="custom-select-wrapper">
+                <input 
+                  className={isMobile ? "m-input" : "input-field"} 
+                  style={{ width: '100%', paddingRight: 36 }}
+                  required 
+                  value={form.category} 
+                  onChange={e => { set('category', e.target.value); setCatOpen(true); }} 
+                  onFocus={() => setCatOpen(true)}
+                  onBlur={() => setTimeout(() => setCatOpen(false), 200)}
+                  placeholder="Выберите или введите..." 
+                />
+                <ChevronDown size={16} className="custom-select-icon" onClick={() => setCatOpen(!catOpen)} />
+                {catOpen && filteredCategories.length > 0 && (
+                  <div className="custom-dropdown-list">
+                    {filteredCategories.map(c => (
+                      <div 
+                        key={c} 
+                        className="custom-dropdown-item" 
+                        onMouseDown={(e) => { e.preventDefault(); set('category', c); setCatOpen(false); }}
+                      >
+                        {c}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           <div className={isMobile ? "m-input-group" : "input-group"}>
@@ -124,18 +186,57 @@ export function Inventory() {
               <input type="number" min="0" className={isMobile ? "m-input" : "input-field"} required value={form.price} onChange={e => set('price', e.target.value)} />
             </div>
           </div>
-          {!isMobile && (
-            <div className="grid grid-2 gap-4">
-              <div className="input-group"><label className="input-label">Поставщик</label><input className="input-field" value={form.supplier || ''} onChange={e => set('supplier', e.target.value)} /></div>
-              <div className="input-group"><label className="input-label">Склад</label><select className="input-field" value={form.location || locations[0]} onChange={e => set('location', e.target.value)}>{locations.map(l => <option key={l}>{l}</option>)}</select></div>
+          <div className={isMobile ? "" : "grid grid-2 gap-4"}>
+            <div className={isMobile ? "m-input-group" : "input-group"} style={{ position: 'relative' }}>
+              <label className={isMobile ? "m-label" : "input-label"}>Поставщик</label>
+              <div className="custom-select-wrapper">
+                <input 
+                  className={isMobile ? "m-input" : "input-field"} 
+                  style={{ width: '100%', paddingRight: 36 }}
+                  value={form.supplier || ''} 
+                  onChange={e => { set('supplier', e.target.value); setSupOpen(true); }} 
+                  onFocus={() => setSupOpen(true)}
+                  onBlur={() => setTimeout(() => setSupOpen(false), 200)}
+                  placeholder="Выберите или введите..." 
+                />
+                <ChevronDown size={16} className="custom-select-icon" onClick={() => setSupOpen(!supOpen)} />
+                {supOpen && filteredSuppliers.length > 0 && (
+                  <div className="custom-dropdown-list" style={{ bottom: isMobile ? '100%' : 'auto', top: isMobile ? 'auto' : 'calc(100% + 6px)', marginBottom: isMobile ? 6 : 0 }}>
+                    {filteredSuppliers.map(c => (
+                      <div key={c} className="custom-dropdown-item" onMouseDown={(e) => { e.preventDefault(); set('supplier', c); setSupOpen(false); }}>
+                        {c}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {suppliers.length === 0 && <div style={{ fontSize: 11, color: 'var(--warning)', marginTop: 4 }}>Сначала добавьте поставщика</div>}
             </div>
-          )}
-          {isMobile && (
-            <div className="m-input-group">
-              <label className="m-label">Склад</label>
-              <select className="m-input" value={form.location || locations[0]} onChange={e => set('location', e.target.value)}>{locations.map(l => <option key={l}>{l}</option>)}</select>
+            <div className={isMobile ? "m-input-group" : "input-group"} style={{ position: 'relative' }}>
+              <label className={isMobile ? "m-label" : "input-label"}>Склад</label>
+              <div className="custom-select-wrapper">
+                <input 
+                  className={isMobile ? "m-input" : "input-field"} 
+                  style={{ width: '100%', paddingRight: 36 }}
+                  value={form.location || ''} 
+                  onChange={e => { set('location', e.target.value); setLocOpen(true); }} 
+                  onFocus={() => setLocOpen(true)}
+                  onBlur={() => setTimeout(() => setLocOpen(false), 200)}
+                  placeholder="Выберите или введите..." 
+                />
+                <ChevronDown size={16} className="custom-select-icon" onClick={() => setLocOpen(!locOpen)} />
+                {locOpen && filteredLocations.length > 0 && (
+                  <div className="custom-dropdown-list" style={{ bottom: isMobile ? '100%' : 'auto', top: isMobile ? 'auto' : 'calc(100% + 6px)', marginBottom: isMobile ? 6 : 0 }}>
+                    {filteredLocations.map(c => (
+                      <div key={c} className="custom-dropdown-item" onMouseDown={(e) => { e.preventDefault(); set('location', c); setLocOpen(false); }}>
+                        {c}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          )}
+          </div>
           <div style={{ display: 'flex', gap: isMobile ? 10 : 12, marginTop: isMobile ? 8 : 16 }}>
             <button type="button" className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setModal(false)}>Отмена</button>
             <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Сохранить</button>
@@ -155,15 +256,15 @@ export function Inventory() {
         </div>
 
         <div className="filter-scroll">
-          {['Все', ...categories].map(c => (
+          {['Все', ...allCategories].map(c => (
             <button key={c} className={`chip ${catFilter === c ? 'active' : ''}`} onClick={() => setCatFilter(c)}>{c}</button>
           ))}
         </div>
 
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>Найдено: {filtered.length}</div>
 
-        <div style={{ borderRadius: 'var(--radius)', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
-          {filtered.length > 0 ? filtered.map(item => (
+        <div style={{ borderRadius: 'var(--radius)', overflow: 'hidden', border: '1px solid var(--border-color)', marginBottom: 16 }}>
+          {paginated.length > 0 ? paginated.map(item => (
             <div key={item.id} className="list-item" onClick={() => openModal(item)}>
               <div className="list-item-content">
                 <div className="list-item-title">{item.name}</div>
@@ -179,6 +280,14 @@ export function Inventory() {
             </div>
           )) : <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>Ничего не найдено</div>}
         </div>
+
+        {totalPages > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 20 }}>
+            <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="btn btn-ghost btn-sm">Назад</button>
+            <div style={{ padding: '6px 12px', background: 'var(--bg-secondary)', borderRadius: 8, fontSize: 13, fontWeight: 500, border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center' }}>{currentPage} / {totalPages}</div>
+            <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="btn btn-ghost btn-sm">Вперёд</button>
+          </div>
+        )}
 
         <button className="fab" onClick={() => openModal()}><Plus size={24} /></button>
         {mobileModal}
@@ -196,7 +305,7 @@ export function Inventory() {
             <input placeholder="Поиск по названию или артикулу..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           <div className="filter-tabs">
-            {['Все', ...categories].map(c => (
+            {['Все', ...allCategories].map(c => (
               <button key={c} className={`filter-tab ${catFilter === c ? 'active' : ''}`} onClick={() => setCatFilter(c)}>{c}</button>
             ))}
           </div>
@@ -212,18 +321,18 @@ export function Inventory() {
           <table className="data-table">
             <thead>
               <tr>
-                <th onClick={() => handleSort('sku')} style={{ cursor: 'pointer' }}>Артикул {getSortIcon('sku')}</th>
-                <th onClick={() => handleSort('name')} style={{ cursor: 'pointer' }}>Название {getSortIcon('name')}</th>
-                <th onClick={() => handleSort('category')} style={{ cursor: 'pointer' }}>Категория {getSortIcon('category')}</th>
-                <th onClick={() => handleSort('location')} style={{ cursor: 'pointer' }}>Склад {getSortIcon('location')}</th>
-                <th onClick={() => handleSort('quantity')} style={{ cursor: 'pointer' }}>Кол-во {getSortIcon('quantity')}</th>
-                <th onClick={() => handleSort('price')} style={{ cursor: 'pointer' }}>Цена {getSortIcon('price')}</th>
+                <th>Артикул</th>
+                <th>Название</th>
+                <th>Категория</th>
+                <th>Склад</th>
+                <th>Кол-во</th>
+                <th>Цена</th>
                 <th>Статус</th>
                 <th style={{width:90}}>Действия</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.length > 0 ? filtered.map(item => (
+              {paginated.length > 0 ? paginated.map(item => (
                 <tr key={item.id}>
                   <td style={{ color: 'var(--text-muted)', fontWeight: 600, fontFamily: 'monospace' }}>{item.sku}</td>
                   <td style={{ fontWeight: 500 }}>{item.name}</td>
@@ -245,8 +354,40 @@ export function Inventory() {
             </tbody>
           </table>
         </div>
-        <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-muted)' }}>
-          Показано: {filtered.length} из {inventory.length}
+        <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <div>Показано: {paginated.length} из {filtered.length}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              Показывать по:
+              <div style={{ display: 'flex', gap: 4 }}>
+                {[10, 20, 50, 100].map(sz => (
+                  <button
+                    key={sz}
+                    onClick={() => { setPageSize(sz); setCurrentPage(1); }}
+                    style={{ 
+                      minWidth: 28, height: 24, fontSize: 11, borderRadius: 6, fontWeight: 600, cursor: 'pointer', padding: '0 4px',
+                      background: pageSize === sz ? 'var(--accent-gradient)' : 'transparent',
+                      color: pageSize === sz ? '#fff' : 'var(--text-secondary)',
+                      border: pageSize === sz ? 'none' : '1px solid var(--border-color)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .2s'
+                    }}
+                  >
+                    {sz}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="btn btn-ghost btn-sm">Назад</button>
+              <div style={{ padding: '6px 12px', background: 'var(--bg-tertiary)', borderRadius: 8, fontWeight: 500, border: '1px solid var(--border-color)' }}>
+                {currentPage} из {totalPages}
+              </div>
+              <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="btn btn-ghost btn-sm">Вперёд</button>
+            </div>
+          )}
         </div>
       </div>
 

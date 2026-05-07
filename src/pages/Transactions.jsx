@@ -14,11 +14,13 @@ export function Transactions() {
   const [modal, setModal] = useState(false);
   const [txType, setTxType] = useState('in');
   const [filter, setFilter] = useState('all');
+  const [timeFilter, setTimeFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [pageSize, setPageSize] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
   const { addToast } = useToast();
   const isMobile = useIsMobile();
   const [form, setForm] = useState({ itemId: '', quantity: 1, note: '' });
-  const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
 
   const getItemName = (id) => inventory.find(i => i.id === id)?.name || '—';
 
@@ -47,37 +49,33 @@ export function Transactions() {
   let filtered = transactions.filter(tx => {
     const matchType = filter === 'all' || tx.type === filter;
     const matchSearch = search === '' || getItemName(tx.itemId).toLowerCase().includes(search.toLowerCase());
-    return matchType && matchSearch;
+    
+    let matchTime = true;
+    if (timeFilter !== 'all') {
+      const txDate = new Date(tx.date);
+      const now = new Date();
+      if (timeFilter === 'day') {
+        matchTime = txDate.toDateString() === now.toDateString();
+      } else if (timeFilter === 'week') {
+        const weekAgo = new Date();
+        weekAgo.setDate(now.getDate() - 7);
+        matchTime = txDate >= weekAgo;
+      } else if (timeFilter === 'month') {
+        matchTime = txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear();
+      } else if (timeFilter === 'year') {
+        matchTime = txDate.getFullYear() === now.getFullYear();
+      }
+    }
+
+    return matchType && matchSearch && matchTime;
   });
 
-  if (sortConfig.key) {
-    filtered.sort((a, b) => {
-      let aVal = a[sortConfig.key];
-      let bVal = b[sortConfig.key];
-      if (sortConfig.key === 'item') {
-        aVal = getItemName(a.itemId).toLowerCase();
-        bVal = getItemName(b.itemId).toLowerCase();
-      }
-      if (sortConfig.key === 'date') {
-        aVal = new Date(a.date).getTime();
-        bVal = new Date(b.date).getTime();
-      }
-      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-      return 0;
-    });
-  }
+  const totalPages = Math.ceil(filtered.length / pageSize) || 1;
+  if (currentPage > totalPages) setCurrentPage(totalPages);
+  
+  const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  const handleSort = (key) => {
-    let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
-    setSortConfig({ key, direction });
-  };
 
-  const getSortIcon = (key) => {
-    if (sortConfig.key !== key) return <ArrowUpDown size={14} style={{ opacity: 0.3, marginLeft: 4 }} />;
-    return sortConfig.direction === 'asc' ? <ChevronUp size={14} style={{ marginLeft: 4 }} /> : <ChevronDown size={14} style={{ marginLeft: 4 }} />;
-  };
 
   /* ──── MODAL (shared) ──── */
   const modalEl = modal && (
@@ -129,9 +127,14 @@ export function Transactions() {
             <button key={v} className={`chip ${filter === v ? 'active' : ''}`} onClick={() => setFilter(v)}>{l}</button>
           ))}
         </div>
+        <div className="filter-scroll" style={{ marginTop: 8 }}>
+          {[['all', 'За всё время'], ['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц'], ['year', 'Год']].map(([v, l]) => (
+            <button key={v} className={`chip ${timeFilter === v ? 'active' : ''}`} onClick={() => setTimeFilter(v)}>{l}</button>
+          ))}
+        </div>
 
-        <div style={{ borderRadius: 'var(--radius)', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
-          {filtered.length > 0 ? filtered.map(tx => (
+        <div style={{ borderRadius: 'var(--radius)', overflow: 'hidden', border: '1px solid var(--border-color)', marginBottom: 16 }}>
+          {paginated.length > 0 ? paginated.map(tx => (
             <div key={tx.id} className="list-item">
               <div className="list-item-icon" style={{ background: tx.type === 'in' ? 'var(--success-light)' : 'var(--danger-light)', color: tx.type === 'in' ? 'var(--success)' : 'var(--danger)' }}>
                 {tx.type === 'in' ? <ArrowDownLeft size={18} /> : <ArrowUpRight size={18} />}
@@ -149,6 +152,14 @@ export function Transactions() {
           )) : <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>Нет операций</div>}
         </div>
 
+        {totalPages > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 20 }}>
+            <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="btn btn-ghost btn-sm">Назад</button>
+            <div style={{ padding: '6px 12px', background: 'var(--bg-secondary)', borderRadius: 8, fontSize: 13, fontWeight: 500, border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center' }}>{currentPage} / {totalPages}</div>
+            <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="btn btn-ghost btn-sm">Вперёд</button>
+          </div>
+        )}
+
         {modalEl}
       </div>
     );
@@ -157,16 +168,25 @@ export function Transactions() {
   /* ──── DESKTOP ──── */
   return (
     <div>
-      <div className="page-header">
-        <div className="flex gap-3 items-center flex-wrap">
-          <div className="search-box">
-            <Search size={16} className="search-icon" />
-            <input placeholder="Поиск по товару..." value={search} onChange={e => setSearch(e.target.value)} />
+      <div className="page-header" style={{ alignItems: 'flex-start' }}>
+        <div>
+          <div className="flex gap-3 items-center flex-wrap" style={{ marginBottom: 12 }}>
+            <div className="search-box">
+              <Search size={16} className="search-icon" />
+              <input placeholder="Поиск по товару..." value={search} onChange={e => setSearch(e.target.value)} />
+            </div>
+            <div className="filter-tabs">
+              <button className={`filter-tab ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>Все</button>
+              <button className={`filter-tab ${filter === 'in' ? 'active' : ''}`} onClick={() => setFilter('in')}>Приход</button>
+              <button className={`filter-tab ${filter === 'out' ? 'active' : ''}`} onClick={() => setFilter('out')}>Расход</button>
+            </div>
           </div>
           <div className="filter-tabs">
-            <button className={`filter-tab ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>Все</button>
-            <button className={`filter-tab ${filter === 'in' ? 'active' : ''}`} onClick={() => setFilter('in')}>Приход</button>
-            <button className={`filter-tab ${filter === 'out' ? 'active' : ''}`} onClick={() => setFilter('out')}>Расход</button>
+            <button className={`filter-tab ${timeFilter === 'all' ? 'active' : ''}`} onClick={() => setTimeFilter('all')}>За всё время</button>
+            <button className={`filter-tab ${timeFilter === 'day' ? 'active' : ''}`} onClick={() => setTimeFilter('day')}>День</button>
+            <button className={`filter-tab ${timeFilter === 'week' ? 'active' : ''}`} onClick={() => setTimeFilter('week')}>Неделя</button>
+            <button className={`filter-tab ${timeFilter === 'month' ? 'active' : ''}`} onClick={() => setTimeFilter('month')}>Месяц</button>
+            <button className={`filter-tab ${timeFilter === 'year' ? 'active' : ''}`} onClick={() => setTimeFilter('year')}>Год</button>
           </div>
         </div>
         <div className="flex gap-2">
@@ -180,15 +200,15 @@ export function Transactions() {
           <table className="data-table">
             <thead>
               <tr>
-                <th onClick={() => handleSort('date')} style={{ cursor: 'pointer' }}>Дата {getSortIcon('date')}</th>
-                <th onClick={() => handleSort('type')} style={{ cursor: 'pointer' }}>Тип {getSortIcon('type')}</th>
-                <th onClick={() => handleSort('item')} style={{ cursor: 'pointer' }}>Товар {getSortIcon('item')}</th>
-                <th onClick={() => handleSort('quantity')} style={{ cursor: 'pointer' }}>Кол-во {getSortIcon('quantity')}</th>
-                <th onClick={() => handleSort('note')} style={{ cursor: 'pointer' }}>Примечание {getSortIcon('note')}</th>
+                <th>Дата</th>
+                <th>Тип</th>
+                <th>Товар</th>
+                <th>Кол-во</th>
+                <th>Примечание</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.length > 0 ? filtered.map(tx => (
+              {paginated.length > 0 ? paginated.map(tx => (
                 <tr key={tx.id}>
                   <td style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(tx.date).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
                   <td><span className={`badge ${tx.type === 'in' ? 'badge-success' : 'badge-danger'}`}>
@@ -202,7 +222,41 @@ export function Transactions() {
             </tbody>
           </table>
         </div>
-        <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-muted)' }}>Показано: {filtered.length} из {transactions.length}</div>
+        <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <div>Показано: {paginated.length} из {filtered.length}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              Показывать по:
+              <div style={{ display: 'flex', gap: 4 }}>
+                {[10, 20, 50, 100].map(sz => (
+                  <button
+                    key={sz}
+                    onClick={() => { setPageSize(sz); setCurrentPage(1); }}
+                    style={{ 
+                      minWidth: 28, height: 24, fontSize: 11, borderRadius: 6, fontWeight: 600, cursor: 'pointer', padding: '0 4px',
+                      background: pageSize === sz ? 'var(--accent-gradient)' : 'transparent',
+                      color: pageSize === sz ? '#fff' : 'var(--text-secondary)',
+                      border: pageSize === sz ? 'none' : '1px solid var(--border-color)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .2s'
+                    }}
+                  >
+                    {sz}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="btn btn-ghost btn-sm">Назад</button>
+              <div style={{ padding: '6px 12px', background: 'var(--bg-tertiary)', borderRadius: 8, fontWeight: 500, border: '1px solid var(--border-color)' }}>
+                {currentPage} из {totalPages}
+              </div>
+              <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="btn btn-ghost btn-sm">Вперёд</button>
+            </div>
+          )}
+        </div>
       </div>
 
       {modalEl}

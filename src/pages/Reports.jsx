@@ -15,7 +15,6 @@ export function Reports() {
   
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('Все');
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
   let filteredInventory = inventory.filter(i => {
     const matchSearch = i.name.toLowerCase().includes(search.toLowerCase()) || i.sku.toLowerCase().includes(search.toLowerCase());
@@ -23,30 +22,7 @@ export function Reports() {
     return matchSearch && matchCat;
   });
 
-  if (sortConfig.key) {
-    filteredInventory.sort((a, b) => {
-      let aVal = a[sortConfig.key];
-      let bVal = b[sortConfig.key];
-      if (sortConfig.key === 'totalValue') {
-        aVal = a.quantity * a.price;
-        bVal = b.quantity * b.price;
-      }
-      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-      return 0;
-    });
-  }
 
-  const handleSort = (key) => {
-    let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
-    setSortConfig({ key, direction });
-  };
-
-  const getSortIcon = (key) => {
-    if (sortConfig.key !== key) return <ArrowUpDown size={14} style={{ opacity: 0.3, marginLeft: 4 }} />;
-    return sortConfig.direction === 'asc' ? <ChevronUp size={14} style={{ marginLeft: 4 }} /> : <ChevronDown size={14} style={{ marginLeft: 4 }} />;
-  };
 
   const filteredTx = transactions.filter(t => {
     const item = inventory.find(i => i.id === t.itemId);
@@ -63,10 +39,11 @@ export function Reports() {
 
   const locMap = {};
   filteredInventory.forEach(i => { const loc = i.location || 'Не указан'; locMap[loc] = (locMap[loc] || 0) + i.quantity; });
+  const sortedLocs = Object.entries(locMap).sort((a, b) => b[1] - a[1]);
 
   const locData = {
-    labels: Object.keys(locMap),
-    datasets: [{ label: 'Количество', data: Object.values(locMap), backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#3b82f6'], borderRadius: 8, barPercentage: .6 }]
+    labels: sortedLocs.map(e => e[0]),
+    datasets: [{ label: 'Количество', data: sortedLocs.map(e => e[1]), backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#3b82f6'], borderRadius: 8, barPercentage: .6 }]
   };
 
   const valMap = {};
@@ -98,16 +75,7 @@ export function Reports() {
   if (isMobile) {
     return (
       <div>
-        <div className="m-search">
-          <Search size={16} />
-          <input placeholder="Поиск по отчётам..." value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
 
-        <div className="filter-scroll">
-          {['Все', ...categories].map(c => (
-            <button key={c} className={`chip ${catFilter === c ? 'active' : ''}`} onClick={() => setCatFilter(c)}>{c}</button>
-          ))}
-        </div>
 
         <div className="grid-2m" style={{ marginBottom: 16 }}>
           <div className="m-card" style={{ textAlign: 'center', padding: 16 }}>
@@ -119,7 +87,9 @@ export function Reports() {
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Единиц</div>
           </div>
           <div className="m-card" style={{ textAlign: 'center', padding: 16 }}>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>{(totalValue / 1000000).toFixed(1)}M ₸</div>
+            <div style={{ fontSize: totalValue >= 1000000 ? 20 : 20, fontWeight: 700 }}>
+              {totalValue >= 1000000 ? (totalValue / 1000000).toFixed(1) + 'M ₸' : totalValue.toLocaleString() + ' ₸'}
+            </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Стоимость</div>
           </div>
           <div className="m-card" style={{ textAlign: 'center', padding: 16 }}>
@@ -158,9 +128,10 @@ export function Reports() {
           )}
         </div>
         
-        <button className="btn btn-primary" style={{ width: '100%', padding: '12px', display: 'flex', justifyContent: 'center' }} onClick={exportReport}>
+        <button className="btn btn-primary" style={{ width: '100%', padding: '12px', display: 'flex', justifyContent: 'center', marginBottom: 20 }} onClick={exportReport}>
           <Download size={18} /> Скачать отчёт
         </button>
+
       </div>
     );
   }
@@ -168,20 +139,7 @@ export function Reports() {
   /* ──── DESKTOP ──── */
   return (
     <div>
-      <div className="page-header">
-        <div className="flex gap-3 items-center flex-wrap">
-          <div className="search-box">
-            <Search size={16} className="search-icon" />
-            <input placeholder="Поиск по названию или артикулу..." value={search} onChange={e => setSearch(e.target.value)} />
-          </div>
-          <div className="filter-tabs">
-            {['Все', ...categories].map(c => (
-              <button key={c} className={`filter-tab ${catFilter === c ? 'active' : ''}`} onClick={() => setCatFilter(c)}>{c}</button>
-            ))}
-          </div>
-        </div>
-        <button className="btn btn-primary btn-sm" onClick={exportReport}><Download size={16} /> Скачать отчёт</button>
-      </div>
+
 
       <div className="grid grid-4 gap-6 mb-6">
         {[
@@ -209,18 +167,21 @@ export function Reports() {
       </div>
 
       <div className="card card-no-hover">
-        <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Полная ведомость запасов</h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Полная ведомость запасов</h3>
+          <button className="btn btn-primary btn-sm" onClick={exportReport}><Download size={16} /> Скачать</button>
+        </div>
         <div className="table-container">
           <table className="data-table">
             <thead>
               <tr>
-                <th onClick={() => handleSort('sku')} style={{ cursor: 'pointer' }}>Артикул {getSortIcon('sku')}</th>
-                <th onClick={() => handleSort('name')} style={{ cursor: 'pointer' }}>Название {getSortIcon('name')}</th>
-                <th onClick={() => handleSort('category')} style={{ cursor: 'pointer' }}>Категория {getSortIcon('category')}</th>
-                <th onClick={() => handleSort('location')} style={{ cursor: 'pointer' }}>Склад {getSortIcon('location')}</th>
-                <th onClick={() => handleSort('quantity')} style={{ cursor: 'pointer' }}>Кол-во {getSortIcon('quantity')}</th>
-                <th onClick={() => handleSort('price')} style={{ cursor: 'pointer' }}>Цена {getSortIcon('price')}</th>
-                <th onClick={() => handleSort('totalValue')} style={{ cursor: 'pointer' }}>Стоимость {getSortIcon('totalValue')}</th>
+                <th>Артикул</th>
+                <th>Название</th>
+                <th>Категория</th>
+                <th>Склад</th>
+                <th>Кол-во</th>
+                <th>Цена</th>
+                <th>Стоимость</th>
               </tr>
             </thead>
             <tbody>

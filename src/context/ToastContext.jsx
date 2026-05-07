@@ -3,6 +3,45 @@ import { CheckCircle, AlertCircle, Info, X } from 'lucide-react';
 
 const ToastContext = createContext();
 
+const ToastItem = ({ t, removeToast, icons, colors }) => {
+  const [offset, setOffset] = useState(0);
+  const [startX, setStartX] = useState(null);
+  
+  const onTouchStart = (e) => setStartX(e.touches[0].clientX);
+  
+  const onTouchMove = (e) => {
+    if (startX === null) return;
+    const diff = e.touches[0].clientX - startX;
+    setOffset(diff);
+  };
+  
+  const onTouchEnd = () => {
+    if (Math.abs(offset) > 80) removeToast(t.id);
+    else setOffset(0);
+    setStartX(null);
+  };
+
+  return (
+    <div 
+      className={`toast toast-${t.type}`}
+      style={{ 
+        transform: offset !== 0 ? `translateX(${offset}px)` : undefined, 
+        transition: startX === null ? 'transform 0.2s ease-out, opacity 0.2s' : 'none',
+        opacity: startX !== null ? 1 - Math.abs(offset) / 150 : 1
+      }}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+    >
+      <span style={{ color: colors[t.type] }}>{icons[t.type]}</span>
+      <span style={{ flex: 1 }}>{t.message}</span>
+      <button onClick={() => removeToast(t.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)', padding:0 }}>
+        <X size={16} />
+      </button>
+    </div>
+  );
+};
+
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
 
@@ -20,15 +59,9 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={{ addToast }}>
       {children}
-      <div className="toast-container">
+      <div className="toast-container" style={{ overflowX: 'hidden' }}>
         {toasts.map(t => (
-          <div key={t.id} className={`toast toast-${t.type}`}>
-            <span style={{ color: colors[t.type] }}>{icons[t.type]}</span>
-            <span style={{ flex: 1 }}>{t.message}</span>
-            <button onClick={() => removeToast(t.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)', padding:0 }}>
-              <X size={16} />
-            </button>
-          </div>
+          <ToastItem key={t.id} t={t} removeToast={removeToast} icons={icons} colors={colors} />
         ))}
       </div>
     </ToastContext.Provider>

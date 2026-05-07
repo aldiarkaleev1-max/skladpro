@@ -91,20 +91,24 @@ export function Suppliers() {
       <div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>Всего: {suppliers.length}</div>
 
-        <div style={{ borderRadius: 'var(--radius)', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
-          {suppliers.map(s => (
-            <div key={s.id} className="list-item" onClick={() => openModal(s)} style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                <div className="list-item-title">{s.name}</div>
-                <span className="badge badge-accent">{s.contact}</span>
+        {suppliers.length > 0 ? (
+          <div style={{ borderRadius: 'var(--radius)', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+            {suppliers.map(s => (
+              <div key={s.id} className="list-item" onClick={() => openModal(s)} style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                  <div className="list-item-title">{s.name}</div>
+                  <span className="badge badge-accent">{s.contact}</span>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Phone size={12} /> {s.phone}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Mail size={12} /> {s.email}</span>
+                </div>
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Phone size={12} /> {s.phone}</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Mail size={12} /> {s.email}</span>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="m-card empty-state" style={{ padding: 48 }}>Пока нет поставщика</div>
+        )}
 
         <button className="fab" onClick={() => openModal()}><Plus size={24} /></button>
         {modalEl}
@@ -120,25 +124,31 @@ export function Suppliers() {
         <button className="btn btn-primary" onClick={() => openModal()}><Plus size={18} /> Добавить</button>
       </div>
 
-      <div className="grid grid-3 gap-6">
-        {suppliers.map(s => (
-          <div key={s.id} className="card card-hover" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div className="flex justify-between items-center">
-              <h3 style={{ fontSize: 16, fontWeight: 700 }}>{s.name}</h3>
-              <div className="flex gap-2">
-                <button className="btn-icon" onClick={() => openModal(s)}><Edit2 size={14} /></button>
-                <button className="btn-icon" onClick={() => handleDelete(s.id)} style={{ color: 'var(--danger)' }}><Trash2 size={14} /></button>
+      {suppliers.length > 0 ? (
+        <div className="grid grid-3 gap-6">
+          {suppliers.map(s => (
+            <div key={s.id} className="card card-hover" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div className="flex justify-between items-center">
+                <h3 style={{ fontSize: 16, fontWeight: 700 }}>{s.name}</h3>
+                <div className="flex gap-2">
+                  <button className="btn-icon" onClick={() => openModal(s)}><Edit2 size={14} /></button>
+                  <button className="btn-icon" onClick={() => handleDelete(s.id)} style={{ color: 'var(--danger)' }}><Trash2 size={14} /></button>
+                </div>
+              </div>
+              <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Контакт: {s.contact}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
+                <span className="flex items-center gap-2" style={{ color: 'var(--text-muted)' }}><Phone size={14} /> {s.phone}</span>
+                <span className="flex items-center gap-2" style={{ color: 'var(--text-muted)' }}><Mail size={14} /> {s.email}</span>
+                <span className="flex items-center gap-2" style={{ color: 'var(--text-muted)' }}><MapPin size={14} /> {s.address}</span>
               </div>
             </div>
-            <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Контакт: {s.contact}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
-              <span className="flex items-center gap-2" style={{ color: 'var(--text-muted)' }}><Phone size={14} /> {s.phone}</span>
-              <span className="flex items-center gap-2" style={{ color: 'var(--text-muted)' }}><Mail size={14} /> {s.email}</span>
-              <span className="flex items-center gap-2" style={{ color: 'var(--text-muted)' }}><MapPin size={14} /> {s.address}</span>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="card card-no-hover empty-state">
+          Пока нет поставщика
+        </div>
+      )}
 
       {modalEl}
     </div>
