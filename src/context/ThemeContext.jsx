@@ -1,12 +1,22 @@
-import React, { createContext, useContext, useEffect } from 'react';
-import { useLocalStorage } from '../hooks/useLocalStorage';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const ThemeContext = createContext();
 
 export function ThemeProvider({ children }) {
-  const [isDark, setIsDark] = useLocalStorage('inventory-theme-dark', false);
+  const [isDark, setIsDark] = useState(() => {
+    try {
+      const item = window.localStorage.getItem('inventory-theme-dark');
+      return item ? JSON.parse(item) : false;
+    } catch (error) {
+      return false;
+    }
+  });
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem('inventory-theme-dark', JSON.stringify(isDark));
+    } catch (e) {}
+    
     if (isDark) {
       document.body.setAttribute('data-theme', 'dark');
     } else {

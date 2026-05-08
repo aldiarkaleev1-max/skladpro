@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useToast } from '../context/ToastContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { useIsMobile } from '../hooks/useIsMobile';
@@ -14,6 +15,10 @@ export function Settings() {
   const { logout } = useAuth();
   const [installPrompt, setInstallPrompt] = useState(window.deferredPrompt);
   const [isInstalled, setIsInstalled] = useState(false);
+
+  const [inventory, setInventory] = useLocalStorage('inventory-data', []);
+  const [transactions, setTransactions] = useLocalStorage('inventory-transactions', []);
+  const [suppliers, setSuppliers] = useLocalStorage('inventory-suppliers', []);
 
   useEffect(() => {
     if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
@@ -46,16 +51,8 @@ export function Settings() {
     }
   };
 
-  const clearData = async () => {
-    if (!await confirm('Удалить все данные? Это действие нельзя отменить.')) return;
-    localStorage.removeItem('inventory-data');
-    localStorage.removeItem('inventory-transactions');
-    localStorage.removeItem('inventory-suppliers');
-    addToast('Данные очищены. Перезагрузите страницу.', 'info');
-  };
-
   const handleLogout = async () => {
-    if (!await confirm('Выйти из аккаунта?')) return;
+    if (!await confirm('Выйти из аккаунта?', 'Выйти', false)) return;
     try {
       await logout();
       addToast('Вы вышли из системы', 'info');
@@ -65,15 +62,20 @@ export function Settings() {
   };
 
   const exportAll = () => {
-    const data = {
-      inventory: JSON.parse(localStorage.getItem('inventory-data') || '[]'),
-      transactions: JSON.parse(localStorage.getItem('inventory-transactions') || '[]'),
-      suppliers: JSON.parse(localStorage.getItem('inventory-suppliers') || '[]'),
-      exportDate: new Date().toISOString(),
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'skladpro_backup.json'; a.click();
-    addToast('Резервная копия скачана', 'success');
+    let csvContent = "ID,Название,Категория,Цена,Количество\n";
+    inventory.forEach(item => {
+      csvContent += `${item.id},"${item.name || ''}","${item.category || ''}",${item.price || 0},${item.quantity || 0}\n`;
+    });
+    
+    const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `skladpro_inventory_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    addToast('Таблица товаров скачана (Excel/CSV)', 'success');
   };
 
   const importData = (e) => {
@@ -83,10 +85,10 @@ export function Settings() {
     reader.onload = (ev) => {
       try {
         const data = JSON.parse(ev.target.result);
-        if (data.inventory) localStorage.setItem('inventory-data', JSON.stringify(data.inventory));
-        if (data.transactions) localStorage.setItem('inventory-transactions', JSON.stringify(data.transactions));
-        if (data.suppliers) localStorage.setItem('inventory-suppliers', JSON.stringify(data.suppliers));
-        addToast('Данные импортированы. Перезагрузите страницу.', 'success');
+        if (data.inventory) setInventory(data.inventory);
+        if (data.transactions) setTransactions(data.transactions);
+        if (data.suppliers) setSuppliers(data.suppliers);
+        addToast('Облачные данные успешно обновлены!', 'success');
       } catch { addToast('Ошибка чтения файла', 'error'); }
     };
     reader.readAsText(file);
@@ -175,31 +177,24 @@ export function Settings() {
         <div className="m-card" style={{ marginBottom: 16 }}>
           <div className="section-title">Данные</div>
           <div style={row}>
-            <div style={{ fontWeight: 500, fontSize: 14 }}>Экспорт JSON</div>
+            <div style={{ fontWeight: 500, fontSize: 14 }}>Экспорт в Excel</div>
             <button className="btn btn-ghost btn-sm" onClick={exportAll}><Download size={16} /></button>
           </div>
-          <div style={row}>
+          <div style={{ ...row, borderBottom: 'none' }}>
             <div style={{ fontWeight: 500, fontSize: 14 }}>Импорт данных</div>
             <label className="btn btn-ghost btn-sm" style={{ cursor: 'pointer' }}>
               <RotateCcw size={16} />
               <input type="file" accept=".json" onChange={importData} style={{ display: 'none' }} />
             </label>
           </div>
-          <div style={{ ...row, borderBottom: 'none' }}>
-            <div>
-              <div style={{ fontWeight: 500, fontSize: 14, color: 'var(--danger)' }}>Очистить</div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Удалить все данные</div>
-            </div>
-            <button className="btn btn-danger btn-sm" onClick={clearData}><Trash2 size={16} /></button>
-          </div>
         </div>
 
         <div className="m-card">
           <div className="section-title">О приложении</div>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-            <strong>СкладПро</strong> v2.0<br />
-            Система учёта запасов предприятия<br />
-            React · Vite · Chart.js · LocalStorage
+            <strong>СкладПро</strong> v3.0 (Cloud)<br />
+            Облачная система учёта запасов<br />
+            React · Firebase Auth · Firestore
           </div>
         </div>
       </div>
@@ -237,12 +232,12 @@ export function Settings() {
         <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 20 }}>Данные</h3>
         <div className="flex justify-between items-center" style={{ padding: '12px 0', borderBottom: '1px solid var(--border-color)' }}>
           <div>
-            <div style={{ fontWeight: 500 }}>Экспорт данных (JSON)</div>
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>Скачать резервную копию всех данных</div>
+            <div style={{ fontWeight: 500 }}>Выгрузить в Excel (CSV)</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>Скачать таблицу товаров для Excel</div>
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={exportAll}><Download size={16} /> Скачать</button>
+          <button className="btn btn-ghost btn-sm" onClick={exportAll}><Download size={16} /> Экспорт</button>
         </div>
-        <div className="flex justify-between items-center" style={{ padding: '12px 0', borderBottom: '1px solid var(--border-color)' }}>
+        <div className="flex justify-between items-center" style={{ padding: '12px 0' }}>
           <div>
             <div style={{ fontWeight: 500 }}>Импорт данных</div>
             <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>Загрузить из JSON-файла</div>
@@ -251,13 +246,6 @@ export function Settings() {
             <RotateCcw size={16} /> Загрузить
             <input type="file" accept=".json" onChange={importData} style={{ display: 'none' }} />
           </label>
-        </div>
-        <div className="flex justify-between items-center" style={{ padding: '12px 0' }}>
-          <div>
-            <div style={{ fontWeight: 500, color: 'var(--danger)' }}>Очистить все данные</div>
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>Удалить товары, операции и поставщиков</div>
-          </div>
-          <button className="btn btn-danger btn-sm" onClick={clearData}><Trash2 size={16} /> Очистить</button>
         </div>
       </div>
 
@@ -272,9 +260,9 @@ export function Settings() {
       <div className="card card-no-hover">
         <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>О системе</h3>
         <div style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-          <strong>СкладПро</strong> — информационная система учета запасов предприятия.<br/>
-          Версия: 2.0 &nbsp;|&nbsp; Разработано: 2026<br/>
-          Стек: React, Vite, Chart.js, LocalStorage
+          <strong>СкладПро Cloud</strong> — современная облачная платформа для управления запасами.<br/>
+          Версия: 3.0 &nbsp;|&nbsp; Синхронизация в реальном времени<br/>
+          Технологии: React, Vite, Chart.js, Firebase Auth & Firestore
         </div>
       </div>
     </div>

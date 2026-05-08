@@ -10,9 +10,9 @@ export function useConfirm() {
 export function ConfirmProvider({ children }) {
   const [state, setState] = useState(null);
 
-  const confirm = useCallback((message) => {
+  const confirm = useCallback((message, confirmText = 'Удалить', isDanger = true) => {
     return new Promise((resolve) => {
-      setState({ message, resolve });
+      setState({ message, resolve, confirmText, isDanger });
     });
   }, []);
 
@@ -38,7 +38,7 @@ export function ConfirmProvider({ children }) {
             <div className="confirm-message">{state.message}</div>
             <div className="confirm-actions">
               <button className="btn btn-ghost" onClick={handleCancel}>Отмена</button>
-              <button className="btn btn-danger" onClick={handleConfirm}>Удалить</button>
+              <button className={`btn ${state.isDanger ? 'btn-danger' : 'btn-primary'}`} onClick={handleConfirm}>{state.confirmText}</button>
             </div>
           </div>
         </div>

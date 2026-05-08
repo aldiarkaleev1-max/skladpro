@@ -33,7 +33,7 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
-      <div className="sidebar-footer">© 2026 СкладПро v2.0</div>
+      <div className="sidebar-footer">© 2026 СкладПро v3.0 Cloud</div>
     </aside>
   );
 }

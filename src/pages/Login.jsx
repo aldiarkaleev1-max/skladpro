@@ -21,7 +21,11 @@ export function Login() {
       addToast('Вы успешно вошли', 'success');
     } catch (error) {
       console.error(error);
-      addToast('Ошибка входа. Проверьте почту или пароль.', 'error');
+      let msg = 'Ошибка входа. Проверьте почту или пароль.';
+      if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') msg = 'Неверный email или пароль.';
+      if (error.code === 'auth/user-not-found') msg = 'Пользователь не найден. Пожалуйста, зарегистрируйтесь.';
+      if (error.code === 'auth/too-many-requests') msg = 'Слишком много попыток. Попробуйте позже.';
+      addToast(msg, 'error');
     } finally {
       setLoading(false);
     }
@@ -35,7 +39,9 @@ export function Login() {
       addToast('Вы успешно вошли через Google!', 'success');
     } catch (error) {
       console.error(error);
-      addToast('Ошибка входа через Google.', 'error');
+      let msg = 'Ошибка входа через Google.';
+      if (error.code === 'auth/popup-closed-by-user') msg = 'Окно входа было закрыто.';
+      addToast(msg, 'error');
     } finally {
       setLoading(false);
     }

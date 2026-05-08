@@ -21,7 +21,11 @@ export function Register() {
       addToast('Вы успешно зарегистрировались!', 'success');
     } catch (error) {
       console.error(error);
-      addToast(`Ошибка: ${error.message}`, 'error');
+      let msg = 'Ошибка регистрации. Попробуйте еще раз.';
+      if (error.code === 'auth/email-already-in-use') msg = 'Этот email уже зарегистрирован. Пожалуйста, просто войдите.';
+      if (error.code === 'auth/invalid-email') msg = 'Неверный формат email адреса.';
+      if (error.code === 'auth/weak-password') msg = 'Слишком простой пароль. Минимум 6 символов.';
+      addToast(msg, 'error');
     } finally {
       setLoading(false);
     }
@@ -35,7 +39,9 @@ export function Register() {
       addToast('Вы успешно вошли через Google!', 'success');
     } catch (error) {
       console.error(error);
-      addToast(`Ошибка: ${error.message}`, 'error');
+      let msg = 'Ошибка входа через Google.';
+      if (error.code === 'auth/popup-closed-by-user') msg = 'Окно входа было закрыто.';
+      addToast(msg, 'error');
     } finally {
       setLoading(false);
     }
